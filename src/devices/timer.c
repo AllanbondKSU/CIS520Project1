@@ -21,7 +21,8 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
-struct list sleeping_list;
+/*list of sleeping thread. NEW */
+struct list sleeping;
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -41,7 +42,7 @@ timer_init (void)
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
   //OUR CODE STARTS HERE
-  list_init(&sleeping_list);
+  list_init(&sleeping);
   //OUR CODE ENDS HERE
 }
 
@@ -91,30 +92,22 @@ timer_elapsed (int64_t then)
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
-   be turned on. */
+   be turned on. NEW */
 void
 timer_sleep (int64_t ticks) 
 {
 
  struct thread *cur_thread;
-  enum intr_level old_level;
-
+ enum intr_level old_level;
   ASSERT (intr_get_level () == INTR_ON);
-
   if (ticks <= 0)
     return;
-
   old_level = intr_disable ();
-
-  /* Get current thread and set wakeup ticks. */
   cur_thread = thread_current ();
   cur_thread->wakeup_ticks = timer_ticks () + ticks;
-
-  /* Insert current thread to ordered sleeping list */
-  list_insert_ordered (&sleeping_list, &cur_thread->elem,
+  list_insert_ordered (&sleeping, &cur_thread->elem,
                        thread_wakeup_ticks_less, NULL);
   thread_block ();
-
   intr_set_level (old_level);
 
 }
@@ -189,19 +182,16 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
+/* Timer interrupt handler. NEW */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-	//OUR CODE STARTS HERE
-  struct list_elem *pe;
-  struct thread *pt;
+  struct list_elem *primary_element;
+  struct thread *primary_thread;
   bool preempt = false;
-
   ticks++;
   thread_tick ();
-
-  /* Actions for 4.4BSD scheduler. */
+	
   if (thread_mlfqs)
     {
       thread_mlfqs_incr_recent_cpu ();
@@ -210,23 +200,22 @@ timer_interrupt (struct intr_frame *args UNUSED)
       else if (ticks % 4 == 0)
         thread_mlfqs_update_priority (thread_current ());
     }
-
-  /* Check and wake up sleeping threads. */
-  while (!list_empty(&sleeping_list))
+  while (!list_empty(&sleeping))
     {
-      pe = list_front (&sleeping_list);
-      pt = list_entry (pe, struct thread, elem);
-      if (pt->wakeup_ticks > ticks)
+      primary_element = list_front (&sleeping);
+      primary_thread = list_entry (primary_element, struct thread, elem);
+      if (primary_thread->wakeup_ticks > ticks)
         {
           break;
+	      
         }
-      list_remove (pe);
-      thread_unblock (pt);
+      list_remove (primary_element);
+	  
+      thread_unblock (primary_thread);
       preempt = true;
     }
   if (preempt)
     intr_yield_on_return ();
-	//OUR CODE ENDS HERE
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
