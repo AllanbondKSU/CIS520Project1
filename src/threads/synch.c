@@ -47,6 +47,7 @@ sema_init (struct semaphore *sema, unsigned value)
 
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
+   
    This function may sleep, so it must not be called within an
    interrupt handler.  This function may be called with
    interrupts disabled, but if it sleeps then the next scheduled
@@ -62,8 +63,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem,
-                           thread_priority_large, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_large, NULL);
       thread_block ();
     }
   sema->value--;
@@ -96,6 +96,7 @@ sema_try_down (struct semaphore *sema)
 }
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
+
    and wakes up one thread of those waiting for SEMA, if any.
    This function may be called from an interrupt handler. */
 void
@@ -109,8 +110,7 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) 
     {
       list_sort (&sema->waiters, thread_priority_large, NULL);
-      thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                  struct thread, elem));
+      thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
     }
     
   sema->value++;
@@ -189,9 +189,11 @@ void
 lock_acquire (struct lock *lock)
 {
   struct thread *t = thread_current ();
-  struct lock *l;
-  int depth = 0;
   enum intr_level old_level;
+  int depth = 0;
+  struct lock *l;
+  
+  
 
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
@@ -201,7 +203,6 @@ lock_acquire (struct lock *lock)
     {
       t->lock_waiting = lock;
       l = lock;
-      /* Do nested priority donation. */
       while (l && t->priority > l->max_priority
              && depth++ < PRIDON_MAX_DEPTH)
         {
@@ -245,6 +246,7 @@ lock_try_acquire (struct lock *lock)
 }
 
 /* Releases LOCK, which must be owned by the current thread.
+
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
@@ -252,18 +254,13 @@ void
 lock_release (struct lock *lock) 
 {
   enum intr_level old_level;
-
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
   old_level = intr_disable ();
-
   if (!thread_mlfqs)
     thread_remove_lock (lock);
-
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-
   intr_set_level (old_level);
 }
 
@@ -288,8 +285,7 @@ lock_priority_large (const struct list_elem *a,
   return la->max_priority > lb->max_priority;
 }
 
-
-/* One semaphore in a list. */
+
 struct semaphore_elem 
   {
     struct list_elem elem;              /* List element. */
