@@ -59,7 +59,6 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
-
 fixed_t load_avg;
 
 static void kernel_thread (thread_func *, void *aux);
@@ -347,13 +346,7 @@ thread_set_priority (int new_priority)
   enum intr_level old_level = intr_disable ();
   struct thread *t = thread_current ();
   int old_priority = t->priority;
-
-  /* Always update base priority. */
   t->base_priority = new_priority;
-
-  /* Only update priority and test preemption if new priority
-     is smaller and current priority is not donated by another
-     thread. */
   if (new_priority < old_priority && list_empty (&t->locks))
     {
       t->priority = new_priority;
@@ -377,9 +370,6 @@ thread_add_lock (struct lock *lock)
   enum intr_level old_level = intr_disable ();
   list_insert_ordered (&thread_current ()->locks, &lock->elem,
                        lock_priority_large, NULL);
-
-  /* Update priority and test preemption if lock's priority
-     is larger than current priority. */
   if (lock->max_priority > thread_current ()->priority)
     {
       thread_current ()->priority = lock->max_priority;
@@ -393,7 +383,6 @@ void
 thread_remove_lock (struct lock *lock)
 {
   enum intr_level old_level = intr_disable ();
-  /* Remove lock from list and update priority. */
   list_remove (&lock->elem);
   thread_update_priority (thread_current ());
   intr_set_level (old_level);
@@ -405,7 +394,6 @@ thread_donate_priority (struct thread *t)
 {
   enum intr_level old_level = intr_disable ();
   thread_update_priority (t);
-  /* If thread is in ready list, reorder it. */
   if (t->status == THREAD_READY)
     {
       list_remove (&t->elem);
@@ -423,8 +411,6 @@ thread_update_priority (struct thread *t)
   enum intr_level old_level = intr_disable ();
   int max_priority = t->base_priority;
   int lock_priority;
-
-  /* Get locks' max priority. */
   if (!list_empty (&t->locks))
     {
       list_sort (&t->locks, lock_priority_large, NULL);
@@ -481,7 +467,7 @@ thread_get_recent_cpu (void)
   return FP_ROUND (FP_MULT_MIX (thread_current ()->recent_cpu, 100));
 }
 
-/* Increase current thread's recent_cpu by 1. */
+/* Increase current thread's recent_cpu by 1 for later use. */
 void
 thread_mlfqs_incr_recent_cpu(void)
 {
@@ -494,7 +480,7 @@ thread_mlfqs_incr_recent_cpu(void)
   t->recent_cpu = FP_ADD_MIX (t->recent_cpu, 1);
 }
 
-/* Calculate thread's recent_cpu. */
+/* Calculate thread's recent cpu. */
 void
 thread_mlfqs_calc_recent_cpu(struct thread *t)
 {
@@ -513,7 +499,7 @@ thread_mlfqs_update_priority(struct thread *t)
 {
   if (t == idle_thread)
     return;
-
+ 
   ASSERT (thread_mlfqs);
   ASSERT (t != idle_thread);
 
@@ -534,15 +520,11 @@ thread_mlfqs_refresh(void)
 {
   ASSERT (thread_mlfqs);
   ASSERT (intr_context ());
-
-  /* Calculate load_avg per second. */
   size_t ready_threads = list_size (&ready_list);
   if (thread_current () != idle_thread)
     ready_threads++;
   load_avg = FP_ADD (FP_DIV_MIX (FP_MULT_MIX (load_avg, 59), 60),
                      FP_DIV_MIX (FP_CONST (ready_threads), 60));
-
-  /* recent_cpu is recalculated for every thread per second. */
   struct thread *t;
   struct list_elem *e = list_begin (&all_list);
   for (; e != list_end (&all_list); e = list_next (e))
@@ -656,7 +638,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+   
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
